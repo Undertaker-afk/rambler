@@ -17,6 +17,18 @@ final version, and side remarks ("come ON, green light!") are dropped.
 
 Everything runs on-device; the only network use is the one-time model download.
 
+## Voice commands
+
+Say the wake word **"Rambler"** after your message, then an instruction:
+
+> "Running late, be there at six, Rambler, add fitting emojis"
+> "Ich komme später, Rambler, translate to English"
+> "Can you send the report, Rambler, make it friendlier"
+
+The message is cleaned first, then the instruction is applied by a second LLM pass (needs the
+model). Without the wake word nothing is ever treated as a command. Translation quality from a
+350M model will be rough for less common languages; use a larger GGUF if that matters.
+
 ## Build
 
 Requires Android SDK 35, NDK 27.2.12479018, CMake 3.22.1, JDK 17.

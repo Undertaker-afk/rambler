@@ -101,10 +101,13 @@ class RamblerIME : InputMethodService() {
         setStatus("Cleaning up…", busy = true)
         val cleaner = LlmCleaner.get(this)
         worker.execute {
-            val cleaned = cleaner.clean(raw)
+            val result = cleaner.process(raw)
             main.post {
-                currentInputConnection?.commitText(cleaned, 1)
-                setStatus(if (cleaner.isModelReady) "Inserted ✓" else "Inserted (basic cleanup - download the model in the Rambler app for smart cleanup)")
+                currentInputConnection?.commitText(result.text, 1)
+                setStatus(
+                    result.note
+                        ?: if (cleaner.isModelReady) "Inserted ✓" else "Inserted (basic cleanup - download the model in the Rambler app for smart cleanup)"
+                )
                 busy = false
             }
         }
