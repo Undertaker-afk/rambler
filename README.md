@@ -1,70 +1,71 @@
 # Rambler
 
-An Android voice keyboard (IME) modelled on the Pixel 11 "Rambler" dictation feature. Tap Talk,
-say your whole thought, tap Done (or just stop talking), and Rambler types **one clean message**
-into whatever field is focused (WhatsApp, SMS, ...).
+**Rambler is a fork of [FUTO Keyboard](https://github.com/futo-org/android-keyboard)** (itself a fork of
+[LatinIME, the Android Open Source Keyboard](https://android.googlesource.com/platform/packages/inputmethods/LatinIME))
+that adds Pixel-style "Rambler" dictation: talk freely, and it types one clean message.
 
-- **Listens to the whole thought first**, then writes it. The raw transcript is never shown or typed.
-- **Removes fillers and self-corrections**: "um", restarted sentences collapse to the final version.
-- **Drops side remarks**: swearing at traffic, talking to someone nearby.
-- **Follows spoken instructions to the keyboard**: "add fitting emojis", "translate to English",
-  "make it shorter / more formal". Saying "Rambler" before the instruction makes it unambiguous,
-  but isn't required; the model decides what is message and what is a command, and requests aimed
-  at the message's recipient ("can you translate the contract...") stay in the message.
+> **This is a modified copy of FUTO Keyboard, not the official FUTO Keyboard.** It is not made, endorsed
+> or supported by FUTO. All the keyboard, layouts, dictionaries and Whisper voice input are FUTO's work -
+> please see the [FUTO Keyboard website](https://keyboard.futo.tech/) and the original repository, and
+> support them. The original README is kept in [FUTO-README.md](FUTO-README.md).
 
-## Design
+## What Rambler adds
 
-Material 3 / Gboard-style, light and dark:
+When you dictate with the keyboard's built-in voice input, Rambler waits for you to finish and then,
+using **Liquid AI LFM3-1.7B** running on the phone (llama.cpp):
 
-- Full keyboard: number row, QWERTY (QWERTZ for German, AZERTY for French), shift with caps lock and
-  auto-capitalisation, symbol pages, hold-to-repeat backspace, long-press accents (a -> ä, s -> ß ...).
-- Voice strip above the keys: keyboard-switch icon, mic icon and, after a dictation, an **Undo** chip.
-  While listening it turns into an animated blue bar with a cancel (X) and a confirm (check) button;
-  while the model works it shows "Writing...".
-- Vector icons only, no emoji anywhere in the UI. UI strings exist in English and German.
+- removes "um", "uh" and other fillers,
+- keeps only the final version when you restart or correct a sentence,
+- drops side remarks (swearing at traffic, talking to someone nearby),
+- follows spoken instructions to the keyboard: "add fitting emojis", "translate to English",
+  "make it shorter / more formal". Saying "Rambler" first makes a command unambiguous but is not required.
 
-## How it works
-
-1. **Listen** - Android's `SpeechRecognizer` (on-device where available) is chained into one
-   continuous session until you tap Done or go quiet (`SpeechCapture`).
-2. **Write** - the transcript goes to **Liquid AI LFM3-1.7B** (QAD Q4_0, ~1.05 GB) running on the
-   phone through llama.cpp via JNI (`LlmCleaner`, `llama_jni.cpp`). One greedy pass with a few-shot
-   ChatML prompt, thinking disabled. The static prompt prefix is evaluated once and its model state
-   cached, so each request only processes the new speech.
-3. **Safety net** - if the model isn't downloaded, fails, or returns empty/oversized output,
-   `RuleBasedCleaner` (fillers, stutters, "scratch that" restarts) is used instead. Commands need
-   the model.
-4. **Insert** - result is committed to the focused field via `InputConnection`.
+Then it types the result. While Rambler is on, the raw transcript is never written into the field.
 
 Everything runs on-device; the only network use is the one-time model download (resumable).
+If the model isn't installed or fails, a simple rule-based cleaner is used and commands are ignored.
 
-## Build
+### Using it
 
-Requires Android SDK 35, NDK 27.2.12479018, CMake 3.22.1, JDK 17. The first native build fetches
-llama.cpp (pinned tag `b12020`; LFM3 needs b11960 or newer) from GitHub via CMake `FetchContent`.
+1. Build/install the app, enable the keyboard, and set up FUTO's voice input (it downloads a Whisper model).
+2. Settings > Voice input > **Rambler model** > tap to download the LFM3 model (about 1 GB).
+3. **Rambler cleanup** (same page) turns the feature on or off; it is on by default.
+
+### Where the changes are
+
+Kept deliberately small so upstream updates stay easy to merge:
+
+| Change | Location |
+|---|---|
+| New module: cleaner, prompt, command parser, model download, JNI llama.cpp bridge | `rambler-llm/` (original Rambler code) |
+| Hook: clean the transcript before it is committed | `java/src/org/futo/inputmethod/latin/uix/actions/VoiceInputAction.kt` |
+| Settings: toggle + model download | `java/src/org/futo/inputmethod/latin/uix/settings/pages/RamblerSettings.kt`, `VoiceInput.kt`, `VoiceInputSettingKeys.kt`, `java/res/values/strings-rambler.xml` |
+| Gradle wiring | `settings.gradle`, `build.gradle` (one line each) |
+
+## Building
+
+Same as FUTO Keyboard (clone **recursively** for the submodules), plus the NDK/CMake the build asks for.
+The first build of `rambler-llm` downloads llama.cpp (pinned tag `b12020`; LFM3 needs b11960 or newer).
+llama.cpp is built for `arm64-v8a` and `x86_64`; other ABIs get a stub and use the basic cleaner.
 
 ```
-echo "sdk.dir=/path/to/Android/Sdk" > local.properties
-./gradlew :app:testDebugUnitTest   # cleaner, command parser, prompt tests
-./gradlew :app:assembleDebug       # builds arm64-v8a + x86_64
+git clone --recursive <this repo>
+./gradlew assembleUnstableDebug
+./gradlew :rambler-llm:testDebugUnitTest
 ```
 
-## Setup on the phone
+## License
 
-1. Open **Rambler**, grant microphone permission, download the model.
-2. Enable the Rambler keyboard, then switch to it (or use the Switch key from another keyboard).
-3. In any text field tap the mic, speak, tap the check (or just stop talking). Tap Undo to take the text back.
+FUTO Keyboard is licensed under the [FUTO Source First License 1.1](LICENSE.md), and this repository is
+a derivative of it, so **those terms apply to this whole repository**. In short: you may use it for any
+purpose, but you may modify and redistribute it **only for non-commercial purposes and free of charge**,
+you must keep all notices and this license, and you must not remove the payment-related functionality.
+Read [LICENSE.md](LICENSE.md) for the real terms. The original AOSP portions remain under Apache 2.0
+(see [NOTICE](NOTICE)). The Rambler model, Liquid AI LFM3, has its own license (LFM 1.0).
 
-## Notes
-
-- LFM3-1.7B is the smallest LFM3 text model; it is much bigger than the earlier LFM2-350M choice.
-  Swap `MODEL_URL` / `MODEL_FILE` in `ModelManager.kt` for a smaller ChatML-style GGUF if needed
-  (the prompt format in `LlmCleaner` is LFM's). The model is under Liquid's LFM 1.0 license.
-- The arm64 build targets `armv8.2-a+dotprod`; very old phones without it will crash.
-- LFM3-Audio-2B exists and could replace the Android speech recognizer, but is not used here.
+FUTO asks that AI-generated pull requests not be sent to their repository; Rambler's additions were
+written with an AI assistant, so don't upstream them as-is.
 
 ## Status
 
-Unit tests pass, the Kotlin and resources compile, the icons were checked visually, and the JNI file compiles against llama.cpp b12020 headers. The keyboard has not been rendered on a device or emulator, so spacing and colours are unverified against the Pixel look. The full native build,
-on-device speed, and the model's real-world quality (especially command-vs-message judgement and
-translation) have **not** been exercised yet.
+Not yet built or run on a device: see the commit history for what has been verified.

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rambler additions (not part of upstream FUTO Keyboard). -->
+<resources>
+    <string name="rambler_enabled_title">Rambler cleanup</string>
+    <string name="rambler_enabled_subtitle">When you finish speaking, remove fillers and restarts, drop side remarks, and follow spoken commands such as \"translate to English\" before typing.</string>
+    <string name="rambler_model_title">Rambler model</string>
+    <string name="rambler_model_subtitle">Tap to download Liquid AI LFM3-1.7B (about 1 GB). Without it only basic cleanup is used and spoken commands are ignored.</string>
+    <string name="rambler_model_installed">Installed. Runs on your phone.</string>
+    <string name="rambler_model_downloading">Downloading… %1$d%%</string>
+    <string name="rambler_model_failed">Download failed: %1$s. Tap to resume.</string>
+</resources>

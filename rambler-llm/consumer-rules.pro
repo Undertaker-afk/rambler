@@ -1,0 +1,1 @@
+-keep class org.futo.inputmethod.rambler.LlamaBridge { *; }
