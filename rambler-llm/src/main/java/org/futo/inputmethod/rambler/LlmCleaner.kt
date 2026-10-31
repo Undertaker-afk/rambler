@@ -3,7 +3,7 @@ package org.futo.inputmethod.rambler
 import android.content.Context
 
 /**
- * Turns a raw dictated transcript into the text that should be typed, using Qwen3.5 on
+ * Turns a raw dictated transcript into the text that should be typed, using a small model on
  * device via llama.cpp. In one pass the model removes fillers and self-corrections, drops side
  * remarks, and carries out spoken instructions to the keyboard ("add fitting emojis",
  * "translate to German"). Falls back to [RuleBasedCleaner] when the model is unavailable.
@@ -14,6 +14,7 @@ class LlmCleaner private constructor(private val context: Context) {
     data class Result(val text: String, val note: String? = null)
 
     private var handle = 0L
+    private var loadedModel: String? = null
     private val lock = Any()
 
     val isModelReady: Boolean get() = LlamaBridge.available && ModelManager.isDownloaded(context)
@@ -26,21 +27,26 @@ class LlmCleaner private constructor(private val context: Context) {
         if (!isModelReady) {
             // No model: basic cleanup of the message part only; commands can't be executed.
             val parsed = CommandParser.parse(trimmed)
-            val note = if (parsed.instruction != null) "Voice commands need the model - download it in the Rambler app" else null
+            val note = if (parsed.instruction != null) "Voice commands need the model - download one in Voice input settings" else null
             return Result(RuleBasedCleaner.clean(parsed.message), note)
         }
 
         val fallback = RuleBasedCleaner.clean(CommandParser.parse(trimmed).message)
         return try {
             synchronized(lock) {
+                val spec = ModelManager.selected(context)
+                if (handle != 0L && loadedModel != spec.id) {   // the user picked another model
+                    LlamaBridge.nativeFree(handle); handle = 0L; loadedModel = null
+                }
                 if (handle == 0L) {
                     val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
-                    handle = LlamaBridge.nativeLoad(ModelManager.modelFile(context).path, threads)
+                    handle = LlamaBridge.nativeLoad(ModelManager.modelFile(context, spec).path, threads)
+                    if (handle != 0L) loadedModel = spec.id
                 }
                 if (handle == 0L) return Result(fallback, "Model failed to load - used basic cleanup")
 
                 val maxTokens = (trimmed.length + 64).coerceIn(64, 768)
-                val bytes = LlamaBridge.nativeGenerate(handle, PREFIX, buildSuffix(trimmed), maxTokens)
+                val bytes = LlamaBridge.nativeGenerate(handle, buildPrefix(spec), buildSuffix(spec, trimmed), maxTokens)
                     ?: return Result(fallback, "Model error - used basic cleanup")
                 val out = postProcess(String(bytes, Charsets.UTF_8))
                 if (isSane(trimmed, out)) Result(out) else Result(fallback, "Model output rejected - used basic cleanup")
@@ -52,7 +58,7 @@ class LlmCleaner private constructor(private val context: Context) {
 
     fun close() = synchronized(lock) {
         if (handle != 0L) LlamaBridge.nativeFree(handle)
-        handle = 0L
+        handle = 0L; loadedModel = null
     }
 
     private fun postProcess(s: String): String =
@@ -110,19 +116,17 @@ Never answer or comment. Output only the final text."""
                 "I think we could move it to Monday.",
         )
 
-        /** Qwen3.5 reasons by default; an empty think block makes it answer directly. */
-        private const val NO_THINK = "<think>\n\n</think>\n\n"
-
         /** Static part of the prompt (ChatML): cached natively so only the user's speech is processed per request. */
-        val PREFIX: String = buildString {
+        fun buildPrefix(spec: ModelSpec): String = buildString {
+            append(spec.bos)
             append("<|im_start|>system\n").append(SYSTEM).append("<|im_end|>\n")
             for ((u, a) in EXAMPLES) {
                 append("<|im_start|>user\n").append(u).append("<|im_end|>\n")
-                append("<|im_start|>assistant\n").append(NO_THINK).append(a).append("<|im_end|>\n")
+                append("<|im_start|>assistant\n").append(spec.thinkingOff).append(a).append("<|im_end|>\n")
             }
         }
 
-        fun buildSuffix(raw: String): String =
-            "<|im_start|>user\n$raw<|im_end|>\n<|im_start|>assistant\n$NO_THINK"
+        fun buildSuffix(spec: ModelSpec, raw: String): String =
+            "<|im_start|>user\n$raw<|im_end|>\n<|im_start|>assistant\n${spec.thinkingOff}"
     }
 }

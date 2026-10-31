@@ -118,7 +118,9 @@ val VoiceInputMenu = UserSettingsMenu(
 
         // Rambler additions
         RamblerEnabledSetting.copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
-        RamblerModelSetting.copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
+        RamblerModelPickerSetting.copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
+        RamblerModelDownloadSetting.copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
+        RamblerModelCleanupSetting.copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
 
         //if(!systemVoiceInput.value) {
         userSettingToggleDataStore(

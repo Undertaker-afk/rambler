@@ -7,32 +7,55 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Downloads and locates the on-device model.
- *
- * Default: Qwen3.5-2B (Apache-2.0), Q4_K_M, ~1.3 GB, via the unsloth GGUF build. Needs a llama.cpp
- * with qwen3.5 support (we pin b12020). The smaller Qwen3.5-0.8B (~0.5 GB) also loads but was
- * noticeably less reliable in testing. The prompt in [LlmCleaner] is ChatML with thinking disabled.
+ * Selects, downloads and locates the on-device models listed in [Models]. The selection is kept in
+ * app-private SharedPreferences so this module stays independent of the keyboard's own settings.
  */
 object ModelManager {
-    const val MODEL_FILE = "Qwen3.5-2B-Q4_K_M.gguf"
-    const val MODEL_URL = "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/$MODEL_FILE"
-    const val MODEL_SIZE_LABEL = "about 1.3 GB"
+    private const val PREFS = "rambler"
+    private const val KEY_SELECTED = "selected_model"
 
-    private const val MIN_VALID_BYTES = 500_000_000L
+    private fun modelsDir(context: Context) = File(context.filesDir, "models").apply { mkdirs() }
 
-    fun modelFile(context: Context): File =
-        File(File(context.filesDir, "models").apply { mkdirs() }, MODEL_FILE)
+    // ------------------------------------------------------------------ selection
 
-    fun isDownloaded(context: Context): Boolean =
-        modelFile(context).let { it.exists() && it.length() > MIN_VALID_BYTES }
+    fun selected(context: Context): ModelSpec =
+        Models.byId(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SELECTED, null))
 
-    /** Blocking, resumable download. [onProgress] gets 0..100. Throws on failure. */
-    fun download(context: Context, onProgress: (Int) -> Unit) {
-        val target = modelFile(context)
+    fun select(context: Context, spec: ModelSpec) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_SELECTED, spec.id).apply()
+    }
+
+    // ------------------------------------------------------------------ files
+
+    fun modelFile(context: Context, spec: ModelSpec = selected(context)): File = File(modelsDir(context), spec.file)
+
+    fun isDownloaded(context: Context, spec: ModelSpec = selected(context)): Boolean =
+        modelFile(context, spec).let { it.exists() && it.length() >= spec.minBytes }
+
+    fun downloadedModels(context: Context): List<ModelSpec> = Models.all.filter { isDownloaded(context, it) }
+
+    /** Bytes used by all downloaded models and unfinished downloads. */
+    fun diskUsage(context: Context): Long = modelsDir(context).listFiles()?.sumOf { it.length() } ?: 0L
+
+    /** Deletes every downloaded or partial model except the currently selected one. Returns bytes freed. */
+    fun deleteOthers(context: Context): Long {
+        val keep = modelFile(context).name
+        var freed = 0L
+        modelsDir(context).listFiles()?.forEach {
+            if (it.name != keep && it.name != "$keep.part") { freed += it.length(); it.delete() }
+        }
+        return freed
+    }
+
+    // ------------------------------------------------------------------ download
+
+    /** Blocking, resumable download of [spec]. [onProgress] gets 0..100. Throws on failure. */
+    fun download(context: Context, spec: ModelSpec, onProgress: (Int) -> Unit) {
+        val target = modelFile(context, spec)
         val part = File(target.path + ".part")
         val have = if (part.exists()) part.length() else 0L
 
-        val conn = URL(MODEL_URL).openConnection() as HttpURLConnection
+        val conn = URL(spec.url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = 30_000
         conn.instanceFollowRedirects = true
@@ -63,11 +86,8 @@ object ModelManager {
                     }
                 }
             }
-            check(part.length() > MIN_VALID_BYTES) { "Download incomplete" }
+            check(part.length() >= spec.minBytes) { "Download incomplete" }
             check(part.renameTo(target)) { "Could not move model into place" }
-            // Remove models from earlier versions of the app.
-            target.parentFile?.listFiles { f -> f.name.endsWith(".gguf") && f.name != MODEL_FILE }
-                ?.forEach { it.delete() }
         } finally {
             conn.disconnect()
         }
