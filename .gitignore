@@ -17,3 +17,4 @@ atl/
 .kotlin/
 rambler-llm/build/
 rambler-llm/.cxx/
+*.apk
