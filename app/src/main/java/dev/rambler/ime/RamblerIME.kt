@@ -37,7 +37,7 @@ class RamblerIME : InputMethodService() {
         fun px(v: Int) = (v * dp).toInt()
 
         status = TextView(this).apply {
-            text = "Tap the mic and talk"
+            text = "Tap Talk, say your whole thought, then tap Done"
             setTextColor(Color.parseColor("#DDDDDD"))
             textSize = 14f
             gravity = Gravity.CENTER
@@ -48,22 +48,22 @@ class RamblerIME : InputMethodService() {
 
         fun key(label: String, weight: Float, onClick: () -> Unit) = Button(this).apply {
             text = label
-            textSize = 20f
+            textSize = 16f
             isAllCaps = false
             setOnClickListener { onClick() }
             layoutParams = LinearLayout.LayoutParams(0, px(64), weight).apply { setMargins(px(3), px(3), px(3), px(3)) }
         }
 
-        mic = key("🎤  Talk", 3f) { toggleListening() }.apply { typeface = Typeface.DEFAULT_BOLD }
+        mic = key("Talk", 3f) { toggleListening() }.apply { typeface = Typeface.DEFAULT_BOLD }
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(px(4), px(2), px(4), px(8))
-            addView(key("🌐", 1f) { switchKeyboard() })
-            addView(key("⌫", 1f) { backspace() })
+            addView(key("Switch", 1f) { switchKeyboard() })
+            addView(key("Del", 1f) { backspace() })
             addView(mic)
-            addView(key("␣", 1f) { currentInputConnection?.commitText(" ", 1) })
-            addView(key("⏎", 1f) { enter() })
+            addView(key("Space", 1f) { currentInputConnection?.commitText(" ", 1) })
+            addView(key("Enter", 1f) { enter() })
         }
 
         return LinearLayout(this).apply {
@@ -77,28 +77,28 @@ class RamblerIME : InputMethodService() {
     private fun toggleListening() {
         if (busy) return
         val c = capture
-        if (c != null && c.isRunning) { c.stop(); setStatus("Cleaning up…", busy = true); return }
+        if (c != null && c.isRunning) { c.stop(); setStatus("Writing...", busy = true); return }
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            setStatus("Microphone permission needed - opening Rambler…")
+            setStatus("Microphone permission needed - opening Rambler...")
             startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
         capture?.destroy()
         capture = SpeechCapture(
             this,
-            onPartial = { text -> main.post { setStatus(if (text.isEmpty()) "Listening…" else text) } },
+            onPartial = { /* The raw transcript is intentionally not shown; the finished thought is written at the end. */ },
             onFinished = { raw -> main.post { onTranscript(raw) } },
-            onError = { msg -> main.post { setStatus(msg); mic.text = "🎤  Talk" } },
+            onError = { msg -> main.post { setStatus(msg); mic.text = "Talk" } },
         ).also { it.start() }
-        mic.text = "⏹  Done"
-        setStatus("Listening…")
+        mic.text = "Done"
+        setStatus("Listening...")
     }
 
     private fun onTranscript(raw: String) {
-        mic.text = "🎤  Talk"
+        mic.text = "Talk"
         if (raw.isBlank()) { setStatus("Didn't catch anything - tap the mic and try again"); return }
-        setStatus("Cleaning up…", busy = true)
+        setStatus("Writing...", busy = true)
         val cleaner = LlmCleaner.get(this)
         worker.execute {
             val result = cleaner.process(raw)
@@ -106,7 +106,7 @@ class RamblerIME : InputMethodService() {
                 currentInputConnection?.commitText(result.text, 1)
                 setStatus(
                     result.note
-                        ?: if (cleaner.isModelReady) "Inserted ✓" else "Inserted (basic cleanup - download the model in the Rambler app for smart cleanup)"
+                        ?: if (cleaner.isModelReady) "Inserted" else "Inserted (basic cleanup - download the model in the Rambler app for smart cleanup)"
                 )
                 busy = false
             }

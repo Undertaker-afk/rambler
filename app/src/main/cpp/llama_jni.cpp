@@ -1,7 +1,11 @@
-// Minimal llama.cpp JNI bridge: load a GGUF, run greedy completion on a prompt string.
+// Minimal llama.cpp JNI bridge: load a GGUF, run greedy completion on a prompt.
+// The static prompt prefix (system prompt + few-shot examples) is evaluated once and its model
+// state is saved/restored, so each request only has to process the new user text.
 #include <jni.h>
 #include <android/log.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -13,16 +17,74 @@
 
 namespace {
 
-constexpr int kCtx = 2048;
+constexpr int kCtx = 3072;
 constexpr int kBatch = 512;
 
 struct Engine {
     llama_model *model = nullptr;
     llama_context *ctx = nullptr;
     const llama_vocab *vocab = nullptr;
+
+    // Cached state after evaluating `prefix_text`.
+    std::string prefix_text;
+    int prefix_len = 0;
+    std::vector<uint8_t> prefix_state;
 };
 
 bool g_backend_ready = false;
+
+std::string to_std(JNIEnv *env, jstring js) {
+    const char *c = env->GetStringUTFChars(js, nullptr);
+    std::string s(c);
+    env->ReleaseStringUTFChars(js, c);
+    return s;
+}
+
+bool tokenize(const llama_vocab *vocab, const std::string &text, std::vector<llama_token> &out) {
+    // Prompts carry their own BOS / special tokens, so add_special=false, parse_special=true.
+    int n = -llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), nullptr, 0, false, true);
+    if (n < 0) return false;
+    out.resize(n);
+    if (n == 0) return true;
+    return llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), out.data(), n, false, true) >= 0;
+}
+
+bool decode(Engine *e, llama_token *tokens, int n) {
+    for (int i = 0; i < n; i += kBatch) {
+        int len = std::min(kBatch, n - i);
+        llama_batch b = llama_batch_get_one(tokens + i, len);
+        if (llama_decode(e->ctx, b) != 0) return false;
+    }
+    return true;
+}
+
+// Brings the context to "prefix evaluated" and returns the prefix length, or -1 on failure.
+int prepare_prefix(Engine *e, const std::string &prefix) {
+    llama_memory_clear(llama_get_memory(e->ctx), true);
+
+    if (prefix == e->prefix_text && !e->prefix_state.empty()) {
+        size_t r = llama_state_seq_set_data(e->ctx, e->prefix_state.data(), e->prefix_state.size(), 0);
+        if (r != 0) return e->prefix_len;
+        LOGE("prefix state restore failed, recomputing");
+        llama_memory_clear(llama_get_memory(e->ctx), true);
+    }
+
+    std::vector<llama_token> toks;
+    if (!tokenize(e->vocab, prefix, toks) || toks.empty()) return -1;
+    if (!decode(e, toks.data(), (int) toks.size())) return -1;
+
+    size_t sz = llama_state_seq_get_size(e->ctx, 0);
+    std::vector<uint8_t> buf(sz);
+    size_t got = sz ? llama_state_seq_get_data(e->ctx, buf.data(), sz, 0) : 0;
+    e->prefix_text = prefix;
+    e->prefix_len = (int) toks.size();
+    if (got == sz && sz > 0) {
+        e->prefix_state = std::move(buf);
+    } else {
+        e->prefix_state.clear();  // caching unavailable; we'll recompute next time
+    }
+    return e->prefix_len;
+}
 
 }  // namespace
 
@@ -32,11 +94,9 @@ Java_dev_rambler_ime_LlamaBridge_nativeLoad(JNIEnv *env, jobject, jstring jpath,
         llama_backend_init();
         g_backend_ready = true;
     }
-    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    std::string path = to_std(env, jpath);
     llama_model_params mp = llama_model_default_params();
-    mp.use_mmap = true;
-    llama_model *model = llama_model_load_from_file(path, mp);
-    env->ReleaseStringUTFChars(jpath, path);
+    llama_model *model = llama_model_load_from_file(path.c_str(), mp);
     if (!model) {
         LOGE("failed to load model");
         return 0;
@@ -54,45 +114,42 @@ Java_dev_rambler_ime_LlamaBridge_nativeLoad(JNIEnv *env, jobject, jstring jpath,
         return 0;
     }
 
-    auto *e = new Engine{model, ctx, llama_model_get_vocab(model)};
+    auto *e = new Engine();
+    e->model = model;
+    e->ctx = ctx;
+    e->vocab = llama_model_get_vocab(model);
     LOGI("model loaded");
     return reinterpret_cast<jlong>(e);
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_dev_rambler_ime_LlamaBridge_nativeGenerate(JNIEnv *env, jobject, jlong handle, jstring jprompt,
-                                                jint max_tokens) {
+Java_dev_rambler_ime_LlamaBridge_nativeGenerate(JNIEnv *env, jobject, jlong handle, jstring jprefix,
+                                                jstring jsuffix, jint max_tokens) {
     auto *e = reinterpret_cast<Engine *>(handle);
     if (!e) return nullptr;
 
-    const char *p = env->GetStringUTFChars(jprompt, nullptr);
-    std::string prompt(p);
-    env->ReleaseStringUTFChars(jprompt, p);
+    std::string prefix = to_std(env, jprefix);
+    std::string suffix = to_std(env, jsuffix);
 
-    // Each request is independent: wipe the KV cache.
-    llama_memory_clear(llama_get_memory(e->ctx), true);
-
-    // The prompt already contains the BOS marker, so don't add another.
-    int n = -llama_tokenize(e->vocab, prompt.c_str(), (int32_t) prompt.size(), nullptr, 0, false, true);
-    if (n <= 0) return nullptr;
-    std::vector<llama_token> tokens(n);
-    if (llama_tokenize(e->vocab, prompt.c_str(), (int32_t) prompt.size(), tokens.data(), n, false, true) < 0)
-        return nullptr;
-    if (n + max_tokens > kCtx) {
-        LOGE("prompt too long: %d tokens", n);
+    int prefix_len = prepare_prefix(e, prefix);
+    if (prefix_len < 0) {
+        LOGE("prefix evaluation failed");
         return nullptr;
     }
 
-    // Prefill in chunks of n_batch.
-    for (int i = 0; i < n; i += kBatch) {
-        int len = std::min(kBatch, n - i);
-        llama_batch b = llama_batch_get_one(tokens.data() + i, len);
-        if (llama_decode(e->ctx, b) != 0) {
-            LOGE("prefill decode failed");
-            return nullptr;
-        }
+    std::vector<llama_token> toks;
+    if (!tokenize(e->vocab, suffix, toks) || toks.empty()) return nullptr;
+    if (prefix_len + (int) toks.size() + max_tokens > kCtx) {
+        LOGE("prompt too long: %d + %zu tokens", prefix_len, toks.size());
+        return nullptr;
+    }
+    if (!decode(e, toks.data(), (int) toks.size())) {
+        LOGE("suffix decode failed");
+        return nullptr;
     }
 
+    // Greedy decoding: this task is mostly faithful copying, so no sampling noise and no
+    // repetition penalty (which would punish copying the user's own words).
     llama_sampler *smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 

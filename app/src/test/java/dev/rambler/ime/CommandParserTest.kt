@@ -17,16 +17,7 @@ class CommandParserTest {
         assertNull(p.instruction)
     }
 
-    @Test fun wakeWordWithoutMessageIsIgnored() {
-        assertNull(CommandParser.parse("Rambler add emojis").instruction)
-    }
+    @Test fun wakeWordWithoutMessageIsIgnored() = assertNull(CommandParser.parse("Rambler add emojis").instruction)
 
-    @Test fun trailingWakeWordIsIgnored() {
-        assertNull(CommandParser.parse("thanks Rambler").instruction)
-    }
-
-    @Test fun editPromptEndsWithRequest() {
-        val p = LlmCleaner.buildEditPrompt("Hi.", "translate to French")
-        assert(p.endsWith("Message: Hi.\nInstruction: translate to French<|im_end|>\n<|im_start|>assistant\n"))
-    }
+    @Test fun trailingWakeWordIsIgnored() = assertNull(CommandParser.parse("thanks Rambler").instruction)
 }

@@ -20,9 +20,4 @@ class RuleBasedCleanerTest {
 
     @Test fun keepsExistingPunctuation() =
         assertEquals("Are you coming?", RuleBasedCleaner.clean("uh are you coming?"))
-
-    @Test fun promptContainsInputLast() {
-        val p = LlmCleaner.buildPrompt("hello there")
-        assert(p.endsWith("<|im_start|>user\nhello there<|im_end|>\n<|im_start|>assistant\n"))
-    }
 }

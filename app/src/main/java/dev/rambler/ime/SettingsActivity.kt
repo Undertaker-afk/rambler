@@ -30,14 +30,14 @@ class SettingsActivity : Activity() {
 
         micStatus = TextView(this)
         modelStatus = TextView(this)
-        downloadBtn = button("Download model (~230 MB)") { downloadModel() }
+        downloadBtn = button("Download model (${ModelManager.MODEL_SIZE_LABEL})") { downloadModel() }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
             addView(TextView(this@SettingsActivity).apply { text = "Rambler"; textSize = 28f })
             addView(TextView(this@SettingsActivity).apply {
-                text = "Talk naturally. Rambler removes the ums, restarts and side comments and types one clean message."
+                text = "Talk naturally. Rambler listens to your whole thought, removes the ums, restarts and side comments, follows spoken instructions like \"translate to English\", and types one clean message."
             })
 
             addView(label("1. Microphone"))
@@ -46,7 +46,7 @@ class SettingsActivity : Activity() {
                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
             })
 
-            addView(label("2. Cleanup model (on-device, LFM2-350M)"))
+            addView(label("2. Writing model (on-device, Liquid AI LFM3-1.7B)"))
             addView(modelStatus)
             addView(downloadBtn)
 
@@ -59,7 +59,7 @@ class SettingsActivity : Activity() {
             })
 
             addView(label("Try it"))
-            addView(EditText(this@SettingsActivity).apply { hint = "Tap here, then use the mic" })
+            addView(EditText(this@SettingsActivity).apply { hint = "Tap here, then use Talk" })
         }
         setContentView(ScrollView(this).apply { addView(root) })
     }
@@ -75,11 +75,11 @@ class SettingsActivity : Activity() {
 
     private fun refresh() {
         val granted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        micStatus.text = if (granted) "✓ Granted" else "Not granted"
+        micStatus.text = if (granted) "Granted" else "Not granted"
         val ready = ModelManager.isDownloaded(this)
         modelStatus.text = when {
             !LlamaBridge.available -> "Native LLM library failed to load - using basic cleanup only"
-            ready -> "✓ Model installed"
+            ready -> "Model installed"
             else -> "Not installed - basic rule-based cleanup is used until you download it"
         }
         downloadBtn.isEnabled = !ready
@@ -89,7 +89,7 @@ class SettingsActivity : Activity() {
         downloadBtn.isEnabled = false
         Executors.newSingleThreadExecutor().execute {
             try {
-                ModelManager.download(this) { pct -> runOnUiThread { modelStatus.text = "Downloading… $pct%" } }
+                ModelManager.download(this) { pct -> runOnUiThread { modelStatus.text = "Downloading... $pct%" } }
             } catch (e: Exception) {
                 runOnUiThread { modelStatus.text = "Download failed: ${e.message}" }
             }
