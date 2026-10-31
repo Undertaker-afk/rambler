@@ -7,7 +7,8 @@ import org.junit.Test
 
 class PromptTest {
     private val qwen = Models.QWEN35_2B
-    private val lfm = Models.all.first { it.id == "lfm2.5-1.2b" }
+    /** A model whose template starts with a BOS token and has no think block (not in the catalog). */
+    private val lfm = ModelSpec("t", "t", "", "t.gguf", "https://example.com/t.gguf", 1_000_000_000L, bos = "<|startoftext|>")
 
     @Test fun qwenPrefixHasNoBosAndEndsAtTurnBoundary() {
         val p = LlmCleaner.buildPrefix(qwen)

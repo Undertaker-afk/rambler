@@ -1,7 +1,10 @@
 package org.futo.inputmethod.rambler
 
 /**
- * A model the user can pick. Every entry must speak ChatML (<|im_start|>role ... <|im_end|>) and be
+ * A model the user can pick. Only models that did well in testing are listed; Liquid LFM2.5 (1.2B
+ * and 2.6B) and LFM3-1.7B were tried and dropped (ignored commands, leaked reasoning).
+ *
+ * Every entry must speak ChatML (<|im_start|>role ... <|im_end|>) and be
  * supported by the pinned llama.cpp; the only per-model differences are the BOS token and whether
  * the template needs an empty think block to switch reasoning off.
  */
@@ -42,7 +45,7 @@ object Models {
         ModelSpec(
             id = "qwen3.5-0.8b",
             name = "Qwen3.5 0.8B",
-            note = "Smallest and fastest. Makes more mistakes.",
+            note = "Smallest and fastest, but makes the most mistakes.",
             file = "Qwen3.5-0.8B-Q4_K_M.gguf",
             url = "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf",
             sizeBytes = 532_517_120L,
@@ -52,29 +55,11 @@ object Models {
         ModelSpec(
             id = "qwen3.5-4b",
             name = "Qwen3.5 4B",
-            note = "Most accurate here, but large and slower on a phone.",
+            note = "Most accurate in testing, but large and slower on a phone.",
             file = "Qwen3.5-4B-Q4_K_M.gguf",
             url = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
             sizeBytes = 2_740_937_888L,
             thinkingOff = QWEN_OFF,
-        ),
-        ModelSpec(
-            id = "lfm2.5-1.2b",
-            name = "Liquid LFM2.5 1.2B",
-            note = "Liquid AI, small and quick.",
-            file = "LFM2.5-1.2B-Instruct-Q4_K_M.gguf",
-            url = "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q4_K_M.gguf",
-            sizeBytes = 731_000_000L,
-            bos = "<|startoftext|>",
-        ),
-        ModelSpec(
-            id = "lfm2.5-2.6b",
-            name = "Liquid LFM2.5 2.6B",
-            note = "Liquid AI, larger.",
-            file = "LFM2.5-2.6B-Q4_K_M.gguf",
-            url = "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_K_M.gguf",
-            sizeBytes = 1_674_000_000L,
-            bos = "<|startoftext|>",
         ),
     )
 
