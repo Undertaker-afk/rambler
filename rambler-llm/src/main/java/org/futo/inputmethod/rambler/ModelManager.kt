@@ -9,14 +9,14 @@ import java.net.URL
 /**
  * Downloads and locates the on-device model.
  *
- * Default: Liquid AI LFM3-1.7B, the QAD (quantization-aware distilled) Q4_0 build, ~1.05 GB.
- * Requires llama.cpp b11960 or newer. Any other ChatML-style GGUF can be swapped in via the
- * constants below, but [LlmCleaner] builds the LFM3 prompt format.
+ * Default: Qwen3.5-2B (Apache-2.0), Q4_K_M, ~1.3 GB, via the unsloth GGUF build. Needs a llama.cpp
+ * with qwen3.5 support (we pin b12020). The smaller Qwen3.5-0.8B (~0.5 GB) also loads but was
+ * noticeably less reliable in testing. The prompt in [LlmCleaner] is ChatML with thinking disabled.
  */
 object ModelManager {
-    const val MODEL_FILE = "LFM3-1.7B-QAD-Q4_0.gguf"
-    const val MODEL_URL = "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/$MODEL_FILE"
-    const val MODEL_SIZE_LABEL = "about 1 GB"
+    const val MODEL_FILE = "Qwen3.5-2B-Q4_K_M.gguf"
+    const val MODEL_URL = "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/$MODEL_FILE"
+    const val MODEL_SIZE_LABEL = "about 1.3 GB"
 
     private const val MIN_VALID_BYTES = 500_000_000L
 

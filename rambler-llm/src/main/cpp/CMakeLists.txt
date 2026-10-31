@@ -32,7 +32,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(llama)
 
-add_library(ramblerllm SHARED llama_jni.cpp)
+add_library(ramblerllm SHARED llama_jni.cpp engine.cpp)
 target_link_libraries(ramblerllm llama log)
 
 # The keyboard's voice input ships its own (different) ggml. Keep ours private so the two

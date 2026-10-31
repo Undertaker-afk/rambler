@@ -3,7 +3,7 @@ package org.futo.inputmethod.rambler
 import android.content.Context
 
 /**
- * Turns a raw dictated transcript into the text that should be typed, using Liquid AI LFM3 on
+ * Turns a raw dictated transcript into the text that should be typed, using Qwen3.5 on
  * device via llama.cpp. In one pass the model removes fillers and self-corrections, drops side
  * remarks, and carries out spoken instructions to the keyboard ("add fitting emojis",
  * "translate to German"). Falls back to [RuleBasedCleaner] when the model is unavailable.
@@ -69,43 +69,60 @@ class LlmCleaner private constructor(private val context: Context) {
                 instance ?: LlmCleaner(context.applicationContext).also { instance = it }
             }
 
-        private const val SYSTEM = """You are the writing engine of a voice keyboard. The user dictated a message out loud. Produce the exact text that should be typed into the message box.
-1. Remove filler sounds and words (um, uh, er, like, you know).
-2. If the speaker restarts a sentence or corrects themselves, keep only the final version.
-3. Drop speech that is not part of the message: swearing at traffic, talking to someone nearby, thinking aloud.
-4. Fix punctuation and capitalisation. Keep the speaker's wording, tone and language.
-5. The speaker may give the keyboard an instruction, often addressed to "Rambler", such as "add fitting emojis", "translate to German", "make it shorter" or "make it more formal". Carry out the instruction on the message and do not type the instruction itself. Only treat speech as an instruction when it is clearly addressed to the keyboard or is an editing command for the whole message. Requests addressed to the message's recipient are part of the message.
-6. Never answer questions and never add new information.
-Output only the final text."""
+        private const val SYSTEM = """You are the writing engine of a voice keyboard. The user dictates a message; you output the exact text to type, nothing else.
 
-        // Each example: dictated speech -> text to type. Emoji are escaped to keep source ASCII.
+Do all of this:
+1. Delete fillers: um, uh, er, like, you know, basically.
+2. If the speaker restarts or corrects themselves ("no wait", "actually", "I mean", "sorry"), keep only the final version.
+3. Delete every remark that is not part of the message: insults, curses and exclamations aimed at other drivers, cyclists or people ("stupid cyclist", "what the hell", "watch it buddy", "get out of the way"), and anything said to someone nearby. Delete only the remark itself: keep every other part of the message, including what the speaker says after the remark.
+4. Fix punctuation and capitalisation. Keep the wording and the language.
+5. Commands: if the speech contains an instruction to the keyboard, usually after the word "Rambler" (add emojis, translate to a language, make it shorter, make it more formal or casual), apply it to the message. Never type the instruction or the word "Rambler".
+6. A request to the reader ("can you translate this for me") is part of the message, not a command.
+Never answer or comment. Output only the final text."""
+
+        // Each example: dictated speech -> text to type. Emoji are escaped to keep the source ASCII.
         private val EXAMPLES = listOf(
             "um so I'll be there at uh five no wait six o'clock" to
                 "I'll be there at six o'clock.",
-            "hey can you pick up milk and oh come on you idiot green light dude anyway and some bread" to
-                "Hey, can you pick up milk and some bread?",
+            "I'm on my way hey that's my spot you idiot anyway see you in ten" to
+                "I'm on my way, see you in ten.",
+            "so I just wanted to say that like the meeting is moved to thursday" to
+                "The meeting is moved to Thursday.",
             "running late be there in ten minutes rambler add fitting emojis" to
                 "Running late, be there in ten minutes \uD83C\uDFC3\u23F1\uFE0F",
-            "ich komme heute etwas später rambler translate that to English" to
+            "can you send me the address oh my god move already the light is green sorry the address of the restaurant" to
+                "Can you send me the address of the restaurant?",
+            "ich komme heute etwas sp\u00E4ter rambler translate to English" to
                 "I'll be a little late today.",
-            "hey can you translate the contract for me by friday" to
-                "Hey, can you translate the contract for me by Friday?",
-            "thanks for dinner it was great make that a bit more casual" to
-                "Thanks for dinner, it was great!",
+            "I'll pick you up at six hey watch it you clown and don't forget your keys" to
+                "I'll pick you up at six, and don't forget your keys.",
+            "what the hell is wrong with this guy anyway the meeting starts at nine" to
+                "The meeting starts at nine.",
+            "thanks for dinner it was great rambler make it more formal" to
+                "Thank you for the dinner; it was wonderful.",
+            "can you translate the contract for me by friday" to
+                "Can you translate the contract for me by Friday?",
+            "tell her happy birthday no not you honey I'm on the phone tell her happy birthday and that I'll call tomorrow" to
+                "Tell her happy birthday and that I'll call tomorrow.",
+            "we are out of coffee so please buy some rambler translate to German" to
+                "Wir haben keinen Kaffee mehr, bitte kauf welchen.",
+            "I think uh we should I mean we could move it to monday" to
+                "I think we could move it to Monday.",
         )
 
-        /** Static part of the prompt: cached natively so only the user's speech is processed per request. */
+        /** Qwen3.5 reasons by default; an empty think block makes it answer directly. */
+        private const val NO_THINK = "<think>\n\n</think>\n\n"
+
+        /** Static part of the prompt (ChatML): cached natively so only the user's speech is processed per request. */
         val PREFIX: String = buildString {
-            append("<|startoftext|>")
             append("<|im_start|>system\n").append(SYSTEM).append("<|im_end|>\n")
             for ((u, a) in EXAMPLES) {
                 append("<|im_start|>user\n").append(u).append("<|im_end|>\n")
-                append("<|im_start|>assistant\n").append(a).append("<|im_end|>\n")
+                append("<|im_start|>assistant\n").append(NO_THINK).append(a).append("<|im_end|>\n")
             }
         }
 
-        /** LFM3 thinks by default; an empty <think></think> block turns that off. */
         fun buildSuffix(raw: String): String =
-            "<|im_start|>user\n$raw<|im_end|>\n<|im_start|>assistant\n<think></think>"
+            "<|im_start|>user\n$raw<|im_end|>\n<|im_start|>assistant\n$NO_THINK"
     }
 }

@@ -1,4 +1,4 @@
-// Rambler: on-device LLM cleanup of dictated text (Liquid AI LFM3 via llama.cpp).
+// Rambler: on-device LLM cleanup of dictated text (Qwen3.5 via llama.cpp).
 // This module is original Rambler code; it is not part of upstream FUTO Keyboard.
 plugins {
     id 'com.android.library' version '8.10.1'
