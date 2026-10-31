@@ -12,6 +12,17 @@ into whatever field is focused (WhatsApp, SMS, ...).
   but isn't required; the model decides what is message and what is a command, and requests aimed
   at the message's recipient ("can you translate the contract...") stay in the message.
 
+## Design
+
+Material 3 / Gboard-style, light and dark:
+
+- Full keyboard: number row, QWERTY (QWERTZ for German, AZERTY for French), shift with caps lock and
+  auto-capitalisation, symbol pages, hold-to-repeat backspace, long-press accents (a -> ä, s -> ß ...).
+- Voice strip above the keys: keyboard-switch icon, mic icon and, after a dictation, an **Undo** chip.
+  While listening it turns into an animated blue bar with a cancel (X) and a confirm (check) button;
+  while the model works it shows "Writing...".
+- Vector icons only, no emoji anywhere in the UI. UI strings exist in English and German.
+
 ## How it works
 
 1. **Listen** - Android's `SpeechRecognizer` (on-device where available) is chained into one
@@ -42,7 +53,7 @@ echo "sdk.dir=/path/to/Android/Sdk" > local.properties
 
 1. Open **Rambler**, grant microphone permission, download the model.
 2. Enable the Rambler keyboard, then switch to it (or use the Switch key from another keyboard).
-3. In any text field tap Talk, speak, tap Done.
+3. In any text field tap the mic, speak, tap the check (or just stop talking). Tap Undo to take the text back.
 
 ## Notes
 
@@ -54,6 +65,6 @@ echo "sdk.dir=/path/to/Android/Sdk" > local.properties
 
 ## Status
 
-Unit tests pass and the JNI file compiles against llama.cpp b12020 headers. The full native build,
+Unit tests pass, the Kotlin and resources compile, the icons were checked visually, and the JNI file compiles against llama.cpp b12020 headers. The keyboard has not been rendered on a device or emulator, so spacing and colours are unverified against the Pixel look. The full native build,
 on-device speed, and the model's real-world quality (especially command-vs-message judgement and
 translation) have **not** been exercised yet.

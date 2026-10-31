@@ -1,0 +1,14 @@
+<resources>
+    <string name="undo">Rückgängig machen</string>
+    <string name="switch_keyboard">Tastatur wechseln</string>
+    <string name="voice_typing">Spracheingabe</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="done">Fertig</string>
+    <string name="writing">Wird geschrieben...</string>
+    <string name="listening">Ich höre zu</string>
+    <string name="delete_key">Löschen</string>
+    <string name="enter_key">Eingabe</string>
+    <string name="shift_key">Umschalt</string>
+    <string name="err_no_mic">Mikrofonberechtigung erforderlich</string>
+    <string name="err_nothing">Nichts verstanden</string>
+</resources>

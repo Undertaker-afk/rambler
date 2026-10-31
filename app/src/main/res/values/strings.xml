@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">Rambler</string>
+    <string name="undo">Undo</string>
+    <string name="switch_keyboard">Switch keyboard</string>
+    <string name="voice_typing">Voice typing</string>
+    <string name="cancel">Cancel</string>
+    <string name="done">Done</string>
+    <string name="writing">Writing...</string>
+    <string name="listening">Listening</string>
+    <string name="delete_key">Delete</string>
+    <string name="enter_key">Enter</string>
+    <string name="shift_key">Shift</string>
+    <string name="symbols_key">\?123</string>
+    <string name="letters_key">ABC</string>
+    <string name="more_symbols_key">=\\&lt;</string>
+    <string name="err_no_mic">Microphone permission needed</string>
+    <string name="err_nothing">Didn\'t catch that</string>
 </resources>
